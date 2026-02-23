@@ -13,6 +13,10 @@ When Claude Code is working on time-consuming tasks like code generation or refa
 
 Short responses (under 60 seconds) won't trigger a notification.
 
+## Multiple Session Support
+
+The state file uses a dict keyed by session ID, so multiple concurrent Claude Code sessions each get independent notifications.
+
 ## Agent Teams Support
 
 When using Agent Teams, the Stop hook fires on the leader session every time a teammate completes. This hook **correctly filters intermediate Stops during team work** and only notifies after the final response once the team is disbanded.
@@ -27,13 +31,13 @@ When using Agent Teams, the Stop hook fires on the leader session every time a t
 
 ```
 UserPromptSubmit
-  → Save session_id + timestamp
+  → Add {session_id: timestamp} to state dict
 
 Stop
-  → session_id match? → No → exit (team member)
+  → session_id in state? → No → exit (team member etc.)
   → 60s elapsed? → No → exit (short response)
   → Active team in teams/? → Yes → exit (team work in progress)
-  → Play sound 🔔
+  → Remove entry from state → Play sound 🔔
 ```
 
 ## Installation

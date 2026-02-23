@@ -12,11 +12,19 @@ try:
 except Exception:
     sys.exit(0)
 
-state = {
-    "session_id": payload.get("session_id", ""),
-    "timestamp": time.time(),
-}
+session_id = payload.get("session_id", "")
+if not session_id:
+    sys.exit(0)
 
+# Read existing state dict
 os.makedirs(STATE_DIR, exist_ok=True)
+try:
+    with open(STATE_PATH, "r", encoding="utf-8") as f:
+        state = json.load(f)
+except Exception:
+    state = {}
+
+state[session_id] = time.time()
+
 with open(STATE_PATH, "w", encoding="utf-8") as f:
     json.dump(state, f)

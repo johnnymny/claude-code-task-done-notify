@@ -13,6 +13,10 @@ Claude Code でコード生成やリファクタリングなど時間のかか�
 
 短い応答（60秒未満）では鳴りません。
 
+## 複数セッション対応
+
+状態ファイルはセッションIDをキーとした dict で管理されるため、複数の Claude Code セッションを同時に実行しても各セッションが独立して通知されます。
+
 ## Agent Teams 対応
 
 Agent Teams 使用時、チームメンバーの完了報告のたびにリーダーセッションで Stop hook が発火しますが、このフックは **チーム作業中の中間 Stop を正しくフィルタ** します。チーム解散後の最終応答でのみ通知します。
@@ -27,13 +31,13 @@ Agent Teams 使用時、チームメンバーの完了報告のたびにリー�
 
 ```
 UserPromptSubmit
-  → session_id + timestamp を保存
+  → state dict に {session_id: timestamp} を追加
 
 Stop
-  → session_id 一致？ → No → exit（チームメンバー）
+  → session_id が state に存在？ → No → exit（チームメンバー等）
   → 60秒経過？ → No → exit（短い応答）
   → teams/ に自分のチームがある？ → Yes → exit（チーム作業中）
-  → 通知音 🔔
+  → state からエントリ削除 → 通知音 🔔
 ```
 
 ## インストール

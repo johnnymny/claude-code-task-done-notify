@@ -34,7 +34,7 @@ except Exception:
 
 session_id = payload.get("session_id", "")
 
-# Read state from UserPromptSubmit
+# Read state dict
 if not os.path.exists(STATE_PATH):
     sys.exit(0)
 
@@ -44,12 +44,12 @@ try:
 except Exception:
     sys.exit(0)
 
-# Filter 1: session_id must match (filters out team members)
-if session_id != state.get("session_id", ""):
+# Filter 1: session_id must exist in state (filters out team members and unknown sessions)
+if session_id not in state:
     sys.exit(0)
 
 # Filter 2: elapsed time must exceed threshold (filters short responses)
-elapsed = time.time() - state.get("timestamp", 0)
+elapsed = time.time() - state[session_id]
 if elapsed < THRESHOLD_SECONDS:
     sys.exit(0)
 
@@ -63,6 +63,14 @@ if os.path.isdir(TEAMS_DIR):
                 sys.exit(0)
         except Exception:
             continue
+
+# Remove entry and write back
+del state[session_id]
+try:
+    with open(STATE_PATH, "w", encoding="utf-8") as f:
+        json.dump(state, f)
+except Exception:
+    pass
 
 # All filters passed — notify
 notify()
