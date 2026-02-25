@@ -26,8 +26,8 @@ When using Agent Teams, the Stop hook fires on the leader session every time a t
 | # | Filter | Purpose |
 |---|--------|---------|
 | 1 | session_id match | Exclude team member Stops |
-| 2 | Elapsed time > 60s | Exclude short responses |
-| 3 | teams/ leadSessionId check | Exclude intermediate Stops during team work |
+| 2 | teams/ leadSessionId check | Exclude intermediate Stops during team work |
+| 3 | jsonl idle check | Exclude intermediate Stops while agent is still responding |
 
 ```
 UserPromptSubmit
@@ -35,9 +35,11 @@ UserPromptSubmit
 
 Stop
   → session_id in state? → No → exit (team member etc.)
-  → 60s elapsed? → No → exit (short response)
   → Active team in teams/? → Yes → exit (team work in progress)
-  → Remove entry from state → Play sound 🔔
+  → Remove entry from state
+  → Spawn background monitor
+    → jsonl still growing? → Wait (agent still working)
+    → jsonl idle + 60s elapsed → Play sound 🔔
 ```
 
 ## Installation
@@ -48,6 +50,7 @@ Stop
 mkdir -p ~/.claude/hooks
 cp hooks/notify_prompt_submit.py ~/.claude/hooks/
 cp hooks/notify_stop.py ~/.claude/hooks/
+cp hooks/notify_monitor.py ~/.claude/hooks/
 ```
 
 Windows:
@@ -55,25 +58,17 @@ Windows:
 New-Item -ItemType Directory -Force "$env:USERPROFILE\.claude\hooks"
 Copy-Item hooks\notify_prompt_submit.py "$env:USERPROFILE\.claude\hooks\"
 Copy-Item hooks\notify_stop.py "$env:USERPROFILE\.claude\hooks\"
+Copy-Item hooks\notify_monitor.py "$env:USERPROFILE\.claude\hooks\"
 ```
 
 ### 2. Customize notification sound
 
-Edit the `notify()` function in `notify_stop.py` to use your preferred notification method.
+Edit `WAV_PATH` in `notify_stop.py` to use your preferred sound file.
 
-Default is Windows system sound (`Windows Notify Calendar.wav`).
-
-macOS:
-```python
-def notify():
-    subprocess.Popen(["afplay", "/System/Library/Sounds/Glass.aiff"])
-```
-
-Linux:
-```python
-def notify():
-    subprocess.Popen(["paplay", "/usr/share/sounds/freedesktop/stereo/complete.oga"])
-```
+`notify_monitor.py` has cross-platform notification built in:
+- **Windows**: PowerShell SoundPlayer (default: `Windows Notify Calendar.wav`)
+- **macOS**: `afplay` (`Glass.aiff`)
+- **Linux**: `paplay` (freedesktop completion sound)
 
 ### 3. Add hook configuration
 
@@ -116,16 +111,22 @@ Add the following to `~/.claude/settings.json` (merge with existing `hooks` sect
 
 - Python 3.10+ (standard library only)
 
-### 5. Adjust threshold
+### 5. Adjust thresholds
 
-Change `THRESHOLD_SECONDS` in `notify_stop.py` (default: 60 seconds).
+Change these in `notify_stop.py`:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `THRESHOLD_SECONDS` | 60 | No notification for responses shorter than this |
+| `IDLE_SECONDS` | 3 | Seconds of jsonl inactivity before considering agent idle |
 
 ## File Structure
 
 | File | Role |
 |------|------|
 | `hooks/notify_prompt_submit.py` | Records session_id + timestamp on UserPromptSubmit |
-| `hooks/notify_stop.py` | 3-layer filter + notification on Stop |
+| `hooks/notify_stop.py` | 3-layer filter + spawn background monitor on Stop |
+| `hooks/notify_monitor.py` | jsonl idle detection + sound notification |
 | `settings.example.json` | Example hook configuration |
 
 ## Cost

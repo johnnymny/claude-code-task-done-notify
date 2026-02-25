@@ -26,8 +26,8 @@ Agent Teams 使用時、チームメンバーの完了報告のたびにリー�
 | # | フィルタ | 目的 |
 |---|---------|------|
 | 1 | session_id 照合 | チームメンバーの Stop を除外 |
-| 2 | 経過時間 > 60秒 | 短い応答を除外 |
-| 3 | teams/ の leadSessionId チェック | チーム作業中の中間 Stop を除外 |
+| 2 | teams/ の leadSessionId チェック | チーム作業中の中間 Stop を除外 |
+| 3 | jsonl idle チェック | エージェントがまだ応答中の中間 Stop を除外 |
 
 ```
 UserPromptSubmit
@@ -35,9 +35,11 @@ UserPromptSubmit
 
 Stop
   → session_id が state に存在？ → No → exit（チームメンバー等）
-  → 60秒経過？ → No → exit（短い応答）
   → teams/ に自分のチームがある？ → Yes → exit（チーム作業中）
-  → state からエントリ削除 → 通知音 🔔
+  → state からエントリ削除
+  → バックグラウンドモニター起動
+    → jsonl が成長中？ → 待機（エージェントまだ作業中）
+    → jsonl が静止 + 60秒以上経過 → 通知音 🔔
 ```
 
 ## インストール
@@ -48,6 +50,7 @@ Stop
 mkdir -p ~/.claude/hooks
 cp hooks/notify_prompt_submit.py ~/.claude/hooks/
 cp hooks/notify_stop.py ~/.claude/hooks/
+cp hooks/notify_monitor.py ~/.claude/hooks/
 ```
 
 Windows:
@@ -55,25 +58,17 @@ Windows:
 New-Item -ItemType Directory -Force "$env:USERPROFILE\.claude\hooks"
 Copy-Item hooks\notify_prompt_submit.py "$env:USERPROFILE\.claude\hooks\"
 Copy-Item hooks\notify_stop.py "$env:USERPROFILE\.claude\hooks\"
+Copy-Item hooks\notify_monitor.py "$env:USERPROFILE\.claude\hooks\"
 ```
 
 ### 2. 通知音をカスタマイズ
 
-`notify_stop.py` の `notify()` 関数を編集して、好みの通知方法に変更できます。
+`notify_stop.py` の `WAV_PATH` を編集して、好みのサウンドファイルに変更できます。
 
-デフォルトは Windows のシステムサウンド（`Windows Notify Calendar.wav`）です。
-
-macOS の場合：
-```python
-def notify():
-    subprocess.Popen(["afplay", "/System/Library/Sounds/Glass.aiff"])
-```
-
-Linux の場合：
-```python
-def notify():
-    subprocess.Popen(["paplay", "/usr/share/sounds/freedesktop/stereo/complete.oga"])
-```
+`notify_monitor.py` にはクロスプラットフォームの通知が組み込まれています：
+- **Windows**: PowerShell の SoundPlayer（デフォルト: `Windows Notify Calendar.wav`）
+- **macOS**: `afplay`（`Glass.aiff`）
+- **Linux**: `paplay`（freedesktop の完了音）
 
 ### 3. フック設定を追加
 
@@ -118,14 +113,20 @@ def notify():
 
 ### 5. 閾値の変更
 
-`notify_stop.py` の `THRESHOLD_SECONDS` を変更してください（デフォルト: 60秒）。
+`notify_stop.py` の以下を変更してください：
+
+| 変数 | デフォルト | 説明 |
+|------|-----------|------|
+| `THRESHOLD_SECONDS` | 60 | この秒数未満の応答では通知しない |
+| `IDLE_SECONDS` | 3 | jsonl が静止したと判断するまでの秒数 |
 
 ## ファイル構成
 
 | ファイル | 役割 |
 |---------|------|
 | `hooks/notify_prompt_submit.py` | UserPromptSubmit で session_id + タイムスタンプを記録 |
-| `hooks/notify_stop.py` | Stop で3層フィルタ + 通知 |
+| `hooks/notify_stop.py` | Stop で3層フィルタ + バックグラウンドモニター起動 |
+| `hooks/notify_monitor.py` | jsonl idle 検知 + 通知音再生 |
 | `settings.example.json` | フック設定のサンプル |
 
 ## コスト
